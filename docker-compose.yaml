@@ -1,0 +1,12 @@
+services:
+  offtube:
+    build:
+      context: .
+    restart: unless-stopped
+    networks:
+      - offtube
+    volumes:
+      - /mnt/offtube:/data
+
+networks:
+  offtube:
