@@ -1,0 +1,631 @@
+{{define "media.html"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Media.Title}} — offtube</title>
+  {{if eq .Media.Type "video"}}
+  <link href="/static/video-js/video-js.css" rel="stylesheet">
+  {{end}}
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .back-link {
+      color: #ff4444;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    .site-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #ff4444;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .media-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .media-title-wrap {
+      flex: 1;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      line-height: 1.4;
+      margin-bottom: 0.5rem;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-video       { background: #1a3a5c; color: #5aabff; }
+    .badge-audio       { background: #2a1a3a; color: #b57bff; }
+    .badge-done        { background: #1a3a1a; color: #5adf5a; }
+    .badge-error       { background: #3a1a1a; color: #ff6b6b; }
+    .badge-running     { background: #3a2e0a; color: #ffc04a; }
+    .badge-queued      { background: #1a2a3a; color: #6ab0ff; }
+    .badge-interrupted { background: #2e1a00; color: #ff9f43; }
+
+    .spinner {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .like-buttons {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .like-btn {
+      background: #1a1a1a;
+      border: 1px solid #3a3a3a;
+      border-radius: 8px;
+      padding: 0.45rem 0.85rem;
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      color: #888;
+      line-height: 1;
+    }
+
+    .like-btn:hover { background: #252525; border-color: #555; transform: scale(1.1); }
+    .like-btn.active-like { background: #1a3a1a; border-color: #5adf5a; color: #5adf5a; }
+    .like-btn.active-dislike { background: #3a1a1a; border-color: #ff6b6b; color: #ff6b6b; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid #2a2a2a;
+      margin-bottom: 1.5rem;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 0.65rem 1.25rem;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+    }
+
+    .tab-btn:hover { color: #ccc; }
+    .tab-btn.active { color: #ff4444; border-bottom-color: #ff4444; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Player */
+    .player-wrap {
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .video-js {
+      width: 100% !important;
+      aspect-ratio: 16/9;
+      height: auto !important;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 1rem;
+    }
+
+    .audio-thumb {
+      width: 100%;
+      max-width: 360px;
+      display: block;
+      margin: 0 auto 1rem;
+      border-radius: 8px;
+    }
+
+    /* Transport controls */
+    .transport {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 0;
+    }
+
+    .transport-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.2rem;
+      background: #1e1e1e;
+      border: 1px solid #3a3a3a;
+      border-radius: 12px;
+      color: #e0e0e0;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .transport-btn:active { background: #2a2a2a; }
+
+    .transport-btn .icon { font-size: 1.6rem; line-height: 1; }
+    .transport-btn .label { font-size: 0.65rem; color: #888; font-weight: 600; letter-spacing: 0.03em; }
+
+    .transport-btn.btn-seek  { width: 72px; height: 72px; }
+    .transport-btn.btn-play  { width: 88px; height: 88px; border-color: #ff4444; }
+    .transport-btn.btn-play .icon { font-size: 2rem; color: #ff4444; }
+
+    /* Metadata table */
+    .meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .meta-table tr:not(:last-child) td {
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .meta-table td {
+      padding: 0.6rem 0.75rem;
+      vertical-align: top;
+    }
+
+    .meta-table td:first-child {
+      color: #888;
+      font-weight: 600;
+      width: 130px;
+      white-space: nowrap;
+    }
+
+    .meta-table td:last-child {
+      word-break: break-word;
+    }
+
+    .description {
+      white-space: pre-wrap;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: #ccc;
+    }
+
+    /* Log */
+    .log-wrap {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    pre {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.78rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #b0c4b0;
+      line-height: 1.5;
+    }
+
+    .uploader {
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 0.9rem;
+      background: #3a1a1a;
+      border: 1px solid #ff6b6b;
+      border-radius: 6px;
+      color: #ff6b6b;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .retry-btn:hover { background: #4a2020; }
+    .retry-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="site-title">offtube</span>
+  <a class="back-link" href="/">&#8592; Back</a>
+</header>
+
+<main>
+  <div class="media-header">
+    <div class="media-title-wrap">
+      <h1>{{.Media.Title}}</h1>
+      <div class="status-row">
+        {{if eq .Media.Type "video"}}
+        <span class="badge badge-video">&#127909; Video</span>
+        {{else}}
+        <span class="badge badge-audio">&#127925; Audio</span>
+        {{end}}
+
+        {{if eq .Media.Status "done"}}
+        <span class="badge badge-done" id="statusBadge">&#10003; Done</span>
+        {{else if eq .Media.Status "error"}}
+        <span class="badge badge-error" id="statusBadge">&#10007; Error</span>
+        <button class="retry-btn" id="retryBtn" onclick="retryDownload()">&#8635; Retry</button>
+        {{else if eq .Media.Status "interrupted"}}
+        <span class="badge badge-interrupted" id="statusBadge">&#9888; Interrupted</span>
+        <button class="retry-btn" id="retryBtn" onclick="retryDownload()">&#8635; Retry</button>
+        {{else if eq .Media.Status "running"}}
+        <span class="badge badge-running" id="statusBadge"><span class="spinner"></span> Downloading</span>
+        {{else}}
+        <span class="badge badge-queued" id="statusBadge"><span class="spinner"></span> Queued</span>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="like-buttons">
+      <button class="like-btn {{if eq .Media.Liked 1}}active-like{{end}}"
+              id="likeBtn"
+              onclick="setLike(1)"
+              title="Like">&#128077;</button>
+      <button class="like-btn {{if eq .Media.Liked -1}}active-dislike{{end}}"
+              id="dislikeBtn"
+              onclick="setLike(-1)"
+              title="Dislike">&#128078;</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('player', this)">&#9654; Player</button>
+    <button class="tab-btn" onclick="showTab('metadata', this)">&#128196; Metadata</button>
+    <button class="tab-btn" onclick="showTab('log', this)">&#128195; Log</button>
+  </div>
+
+  <!-- Player tab -->
+  <div class="tab-panel active" id="tab-player">
+    {{if eq .Media.Type "video"}}
+    <div class="player-wrap">
+      <video id="player"
+             class="video-js vjs-default-skin vjs-big-play-centered"
+             controls
+             preload="auto"
+             data-setup='{}'>
+        <source src="/media/{{.Media.ID}}/file/video.mp4" type="video/mp4">
+        <p class="vjs-no-js">Video playback requires JavaScript.</p>
+      </video>
+    </div>
+    {{else}}
+    <img class="audio-thumb"
+         src="/media/{{.Media.ID}}/file/audio.jpg"
+         alt="{{.Media.Title}}"
+         onerror="this.style.display='none'">
+    <audio id="player" controls preload="auto">
+      <source src="/media/{{.Media.ID}}/file/audio.mp3" type="audio/mpeg">
+      Your browser does not support the audio element.
+    </audio>
+    {{end}}
+
+    <div class="transport">
+      <button class="transport-btn btn-seek" onclick="seekBy(-5)" title="-5 seconds">
+        <span class="icon">&#8592;</span>
+        <span class="label">-5s</span>
+      </button>
+      <button class="transport-btn btn-play" id="playPauseBtn" onclick="togglePlay()" title="Play / Pause">
+        <span class="icon" id="playIcon">&#9654;</span>
+        <span class="label" id="playLabel">PLAY</span>
+      </button>
+      <button class="transport-btn btn-seek" onclick="seekBy(5)" title="+5 seconds">
+        <span class="icon">&#8594;</span>
+        <span class="label">+5s</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Metadata tab -->
+  <div class="tab-panel" id="tab-metadata">
+    <table class="meta-table">
+      <tr><td>ID</td><td>{{.Media.ID}}</td></tr>
+      <tr><td>Title</td><td>{{.Media.Title}}</td></tr>
+      <tr><td>Uploader</td><td>{{.Media.Uploader}}</td></tr>
+      <tr><td>URL</td><td><a href="{{.Media.URL}}" target="_blank" rel="noopener" style="color:#5aabff;">{{.Media.URL}}</a></td></tr>
+      <tr><td>Type</td><td>{{.Media.Type}}</td></tr>
+      <tr><td>Status</td><td>{{.Media.Status}}</td></tr>
+      <tr><td>Submitted At</td><td>{{.Media.SubmittedAt.Format "2006-01-02 15:04:05 UTC"}}</td></tr>
+      <tr><td>Liked</td><td>{{if eq .Media.Liked 1}}&#128077; Liked{{else if eq .Media.Liked -1}}&#128078; Disliked{{else}}— Neutral{{end}}</td></tr>
+      {{if .Media.Description}}
+      <tr><td>Description</td><td><span class="description">{{.Media.Description}}</span></td></tr>
+      {{end}}
+    </table>
+  </div>
+
+  <!-- Log tab -->
+  <div class="tab-panel" id="tab-log">
+    <div class="log-wrap" id="logWrap">
+      <pre id="logContent">{{.Log}}</pre>
+    </div>
+  </div>
+</main>
+
+{{if eq .Media.Type "video"}}
+<script src="/static/video-js/video.js"></script>
+{{end}}
+
+<script>
+const MEDIA_ID = "{{.Media.ID}}";
+const MEDIA_TYPE = "{{.Media.Type}}";
+const COOKIE_NAME = "pos_" + MEDIA_ID;
+let currentLiked = {{.Media.Liked}};
+let currentStatus = "{{.Media.Status}}";
+
+// Tab switching
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+
+  if (name === 'log') {
+    scrollLogToBottom();
+  }
+}
+
+function scrollLogToBottom() {
+  const wrap = document.getElementById('logWrap');
+  if (wrap) wrap.scrollTop = wrap.scrollHeight;
+}
+
+// Cookie helpers
+function setCookie(name, value, days) {
+  const maxAge = days * 24 * 60 * 60;
+  document.cookie = name + '=' + encodeURIComponent(value) + '; max-age=' + maxAge + '; path=/';
+}
+
+function getCookie(name) {
+  const prefix = name + '=';
+  for (const part of document.cookie.split(';')) {
+    const p = part.trim();
+    if (p.startsWith(prefix)) {
+      return decodeURIComponent(p.slice(prefix.length));
+    }
+  }
+  return null;
+}
+
+// Position persistence
+function setupPositionPersistence(player, isVideoJS) {
+  const savePos = () => {
+    const t = isVideoJS ? player.currentTime() : player.currentTime;
+    if (t && t > 0) setCookie(COOKIE_NAME, t.toString(), 30);
+  };
+
+  const restorePos = () => {
+    const saved = getCookie(COOKIE_NAME);
+    if (saved) {
+      const t = parseFloat(saved);
+      if (t > 10) {
+        if (isVideoJS) player.currentTime(t);
+        else player.currentTime = t;
+      }
+    }
+  };
+
+  if (isVideoJS) {
+    player.on('timeupdate', savePos);
+    player.on('loadedmetadata', restorePos);
+  } else {
+    player.addEventListener('timeupdate', savePos);
+    player.addEventListener('loadedmetadata', restorePos);
+  }
+}
+
+// Player abstraction for transport controls
+let vjsPlayer = null;
+
+function getPlayer() {
+  if (MEDIA_TYPE === 'video' && vjsPlayer) return { vjs: vjsPlayer };
+  return { el: document.getElementById('player') };
+}
+
+function seekBy(delta) {
+  const p = getPlayer();
+  if (p.vjs) {
+    p.vjs.currentTime(Math.max(0, p.vjs.currentTime() + delta));
+  } else if (p.el) {
+    p.el.currentTime = Math.max(0, p.el.currentTime + delta);
+  }
+}
+
+function togglePlay() {
+  const p = getPlayer();
+  if (p.vjs) {
+    p.vjs.paused() ? p.vjs.play() : p.vjs.pause();
+  } else if (p.el) {
+    p.el.paused ? p.el.play() : p.el.pause();
+  }
+}
+
+function updatePlayBtn(paused) {
+  document.getElementById('playIcon').textContent  = paused ? '▶' : '⏸';
+  document.getElementById('playLabel').textContent = paused ? 'PLAY' : 'PAUSE';
+}
+
+// Set up player
+window.addEventListener('DOMContentLoaded', () => {
+  if (MEDIA_TYPE === 'video' && typeof videojs !== 'undefined') {
+    vjsPlayer = videojs('player', {
+      fluid: true,
+      playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+    });
+    setupPositionPersistence(vjsPlayer, true);
+    vjsPlayer.on('play',  () => updatePlayBtn(false));
+    vjsPlayer.on('pause', () => updatePlayBtn(true));
+  } else {
+    const el = document.getElementById('player');
+    if (el) {
+      setupPositionPersistence(el, false);
+      el.addEventListener('play',  () => updatePlayBtn(false));
+      el.addEventListener('pause', () => updatePlayBtn(true));
+    }
+  }
+
+  scrollLogToBottom();
+});
+
+// Like/dislike
+async function setLike(value) {
+  const newValue = (currentLiked === value) ? 0 : value;
+  try {
+    const resp = await fetch('/api/like/' + MEDIA_ID, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: newValue }),
+    });
+    if (!resp.ok) return;
+
+    currentLiked = newValue;
+    document.getElementById('likeBtn').className =
+      'like-btn' + (newValue === 1 ? ' active-like' : '');
+    document.getElementById('dislikeBtn').className =
+      'like-btn' + (newValue === -1 ? ' active-dislike' : '');
+  } catch (e) {
+    console.error('like error', e);
+  }
+}
+
+async function retryDownload() {
+  const btn = document.getElementById('retryBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+  try {
+    const resp = await fetch('/api/retry/' + MEDIA_ID, { method: 'POST' });
+    if (!resp.ok) { if (btn) { btn.disabled = false; btn.textContent = '↺ Retry'; } return; }
+    currentStatus = 'queued';
+    updateStatusBadge('queued');
+    setTimeout(pollStatus, 2000);
+  } catch (e) {
+    console.error('retry error', e);
+    if (btn) { btn.disabled = false; btn.textContent = '↺ Retry'; }
+  }
+}
+
+function updateStatusBadge(status) {
+  const badge = document.getElementById('statusBadge');
+  if (!badge) return;
+  const spinner = '<span class="spinner"></span> ';
+  const needsRetry = status === 'error' || status === 'interrupted';
+
+  const configs = {
+    done:        { cls: 'badge-done',        html: '&#10003; Done' },
+    error:       { cls: 'badge-error',       html: '&#10007; Error' },
+    interrupted: { cls: 'badge-interrupted', html: '&#9888; Interrupted' },
+    running:     { cls: 'badge-running',     html: spinner + 'Downloading' },
+    queued:      { cls: 'badge-queued',      html: spinner + 'Queued' },
+  };
+  const cfg = configs[status] || configs.queued;
+  badge.className = 'badge ' + cfg.cls;
+  badge.innerHTML = cfg.html;
+
+  let retryBtn = document.getElementById('retryBtn');
+  if (needsRetry && !retryBtn) {
+    retryBtn = document.createElement('button');
+    retryBtn.className = 'retry-btn'; retryBtn.id = 'retryBtn';
+    retryBtn.innerHTML = '&#8635; Retry'; retryBtn.onclick = retryDownload;
+    badge.insertAdjacentElement('afterend', retryBtn);
+  } else if (!needsRetry && retryBtn) {
+    retryBtn.remove();
+  }
+}
+
+async function pollStatus() {
+  if (currentStatus !== 'running' && currentStatus !== 'queued') return;
+
+  try {
+    const resp = await fetch('/api/status/' + MEDIA_ID);
+    if (!resp.ok) return;
+    const data = await resp.json();
+
+    document.getElementById('logContent').textContent = data.log || '';
+    scrollLogToBottom();
+
+    if (data.status !== currentStatus) {
+      currentStatus = data.status;
+      updateStatusBadge(currentStatus);
+    }
+
+    if (currentStatus === 'running' || currentStatus === 'queued') {
+      setTimeout(pollStatus, 3000);
+    }
+  } catch (e) {
+    console.error('poll error', e);
+    setTimeout(pollStatus, 5000);
+  }
+}
+
+if (currentStatus === 'running' || currentStatus === 'queued') {
+  setTimeout(pollStatus, 3000);
+}
+</script>
+
+</body>
+</html>
+{{end}}
