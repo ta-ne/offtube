@@ -528,8 +528,7 @@ func (a *App) handleMinifluxWebhook(mediaType MediaType) http.HandlerFunc {
 			results = append(results, result{URL: entry.URL, ID: id, Duplicate: duplicate})
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"results": results})
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
