@@ -435,32 +435,17 @@ function scrollLogToBottom() {
   if (wrap) wrap.scrollTop = wrap.scrollHeight;
 }
 
-// Cookie helpers
-function setCookie(name, value, days) {
-  const maxAge = days * 24 * 60 * 60;
-  document.cookie = name + '=' + encodeURIComponent(value) + '; max-age=' + maxAge + '; path=/';
-}
-
-function getCookie(name) {
-  const prefix = name + '=';
-  for (const part of document.cookie.split(';')) {
-    const p = part.trim();
-    if (p.startsWith(prefix)) {
-      return decodeURIComponent(p.slice(prefix.length));
-    }
-  }
-  return null;
-}
-
 // Position persistence
+let _savePos = null;
+
 function setupPositionPersistence(player, isVideoJS) {
-  const savePos = () => {
+  _savePos = () => {
     const t = isVideoJS ? player.currentTime() : player.currentTime;
-    if (t && t > 0) setCookie(COOKIE_NAME, t.toString(), 30);
+    if (t && t > 0) localStorage.setItem(COOKIE_NAME, t.toString());
   };
 
   const restorePos = () => {
-    const saved = getCookie(COOKIE_NAME);
+    const saved = localStorage.getItem(COOKIE_NAME);
     if (saved) {
       const t = parseFloat(saved);
       if (t > 10) {
@@ -470,11 +455,19 @@ function setupPositionPersistence(player, isVideoJS) {
     }
   };
 
+  let lastSave = 0;
+  const savePosTimed = () => {
+    const now = Date.now();
+    if (now - lastSave >= 3000) { lastSave = now; _savePos(); }
+  };
+
   if (isVideoJS) {
-    player.on('timeupdate', savePos);
+    player.on('timeupdate', savePosTimed);
+    player.on('pause', _savePos);
     player.on('loadedmetadata', restorePos);
   } else {
-    player.addEventListener('timeupdate', savePos);
+    player.addEventListener('timeupdate', savePosTimed);
+    player.addEventListener('pause', _savePos);
     player.addEventListener('loadedmetadata', restorePos);
   }
 }
@@ -494,6 +487,7 @@ function seekBy(delta) {
   } else if (p.el) {
     p.el.currentTime = Math.max(0, p.el.currentTime + delta);
   }
+  if (_savePos) _savePos();
 }
 
 function togglePlay() {
