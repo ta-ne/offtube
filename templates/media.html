@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{.Media.Title}} — offtube</title>
-  {{if eq .Media.Type "video"}}
-  <link href="/static/video-js/video-js.css" rel="stylesheet">
-  {{end}}
+  <link href="/static/plyr/plyr.css" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -54,9 +52,7 @@
       margin-bottom: 1.5rem;
     }
 
-    .media-title-wrap {
-      flex: 1;
-    }
+    .media-title-wrap { flex: 1; }
 
     h1 {
       font-size: 1.4rem;
@@ -154,21 +150,12 @@
     .tab-panel.active { display: block; }
 
     /* Player */
+    :root { --plyr-color-main: #ff4444; }
+
     .player-wrap {
       background: #000;
       border-radius: 10px;
       overflow: hidden;
-    }
-
-    .video-js {
-      width: 100% !important;
-      aspect-ratio: 16/9;
-      height: auto !important;
-    }
-
-    audio {
-      width: 100%;
-      margin-top: 1rem;
     }
 
     .audio-thumb {
@@ -220,9 +207,7 @@
       font-size: 0.875rem;
     }
 
-    .meta-table tr:not(:last-child) td {
-      border-bottom: 1px solid #2a2a2a;
-    }
+    .meta-table tr:not(:last-child) td { border-bottom: 1px solid #2a2a2a; }
 
     .meta-table td {
       padding: 0.6rem 0.75rem;
@@ -236,9 +221,7 @@
       white-space: nowrap;
     }
 
-    .meta-table td:last-child {
-      word-break: break-word;
-    }
+    .meta-table td:last-child { word-break: break-word; }
 
     .description {
       white-space: pre-wrap;
@@ -266,11 +249,6 @@
       line-height: 1.5;
     }
 
-    .uploader {
-      font-size: 0.85rem;
-      color: #888;
-    }
-
     .retry-btn {
       display: inline-flex;
       align-items: center;
@@ -286,7 +264,6 @@
       transition: background 0.15s;
     }
     .retry-btn:hover { background: #4a2020; }
-    .retry-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -308,30 +285,34 @@
         {{end}}
 
         {{if eq .Media.Status "done"}}
-        <span class="badge badge-done" id="statusBadge">&#10003; Done</span>
+        <span class="badge badge-done">&#10003; Done</span>
         {{else if eq .Media.Status "error"}}
-        <span class="badge badge-error" id="statusBadge">&#10007; Error</span>
-        <button class="retry-btn" id="retryBtn" onclick="retryDownload()">&#8635; Retry</button>
+        <span class="badge badge-error">&#10007; Error</span>
+        <form method="POST" action="/api/retry/{{.Media.ID}}" style="display:inline">
+          <button class="retry-btn">&#8635; Retry</button>
+        </form>
         {{else if eq .Media.Status "interrupted"}}
-        <span class="badge badge-interrupted" id="statusBadge">&#9888; Interrupted</span>
-        <button class="retry-btn" id="retryBtn" onclick="retryDownload()">&#8635; Retry</button>
+        <span class="badge badge-interrupted">&#9888; Interrupted</span>
+        <form method="POST" action="/api/retry/{{.Media.ID}}" style="display:inline">
+          <button class="retry-btn">&#8635; Retry</button>
+        </form>
         {{else if eq .Media.Status "running"}}
-        <span class="badge badge-running" id="statusBadge"><span class="spinner"></span> Downloading</span>
+        <span class="badge badge-running"><span class="spinner"></span> Downloading</span>
         {{else}}
-        <span class="badge badge-queued" id="statusBadge"><span class="spinner"></span> Queued</span>
+        <span class="badge badge-queued"><span class="spinner"></span> Queued</span>
         {{end}}
       </div>
     </div>
 
     <div class="like-buttons">
-      <button class="like-btn {{if eq .Media.Liked 1}}active-like{{end}}"
-              id="likeBtn"
-              onclick="setLike(1)"
-              title="Like">&#128077;</button>
-      <button class="like-btn {{if eq .Media.Liked -1}}active-dislike{{end}}"
-              id="dislikeBtn"
-              onclick="setLike(-1)"
-              title="Dislike">&#128078;</button>
+      <form method="POST" action="/api/like/{{.Media.ID}}">
+        <input type="hidden" name="value" value="1">
+        <button class="like-btn {{if eq .Media.Liked 1}}active-like{{end}}" title="Like">&#128077;</button>
+      </form>
+      <form method="POST" action="/api/like/{{.Media.ID}}">
+        <input type="hidden" name="value" value="-1">
+        <button class="like-btn {{if eq .Media.Liked -1}}active-dislike{{end}}" title="Dislike">&#128078;</button>
+      </form>
     </div>
   </div>
 
@@ -346,13 +327,8 @@
   <div class="tab-panel active" id="tab-player">
     {{if eq .Media.Type "video"}}
     <div class="player-wrap">
-      <video id="player"
-             class="video-js vjs-default-skin vjs-big-play-centered"
-             controls
-             preload="auto"
-             data-setup='{}'>
+      <video id="player" controls preload="auto">
         <source src="/media/{{.Media.ID}}/file/video.mp4" type="video/mp4">
-        <p class="vjs-no-js">Video playback requires JavaScript.</p>
       </video>
     </div>
     {{else}}
@@ -362,7 +338,6 @@
          onerror="this.style.display='none'">
     <audio id="player" controls preload="auto">
       <source src="/media/{{.Media.ID}}/file/audio.mp3" type="audio/mpeg">
-      Your browser does not support the audio element.
     </audio>
     {{end}}
 
@@ -371,7 +346,7 @@
         <span class="icon">&#8592;</span>
         <span class="label">-5s</span>
       </button>
-      <button class="transport-btn btn-play" id="playPauseBtn" onclick="togglePlay()" title="Play / Pause">
+      <button class="transport-btn btn-play" onclick="togglePlay()" title="Play / Pause">
         <span class="icon" id="playIcon">&#9654;</span>
         <span class="label" id="playLabel">PLAY</span>
       </button>
@@ -402,21 +377,16 @@
   <!-- Log tab -->
   <div class="tab-panel" id="tab-log">
     <div class="log-wrap" id="logWrap">
-      <pre id="logContent">{{.Log}}</pre>
+      <pre>{{.Log}}</pre>
     </div>
   </div>
 </main>
 
-{{if eq .Media.Type "video"}}
-<script src="/static/video-js/video.js"></script>
-{{end}}
-
+<script src="/static/plyr/plyr.min.js"></script>
 <script>
-const MEDIA_ID = "{{.Media.ID}}";
-const MEDIA_TYPE = "{{.Media.Type}}";
-const COOKIE_NAME = "pos_" + MEDIA_ID;
-let currentLiked = {{.Media.Liked}};
-let currentStatus = "{{.Media.Status}}";
+const COOKIE_NAME = "pos_{{.Media.ID}}";
+let player = null;
+let _savePos = null;
 
 // Tab switching
 function showTab(name, btn) {
@@ -424,79 +394,21 @@ function showTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-
   if (name === 'log') {
-    scrollLogToBottom();
+    const wrap = document.getElementById('logWrap');
+    if (wrap) wrap.scrollTop = wrap.scrollHeight;
   }
 }
 
-function scrollLogToBottom() {
-  const wrap = document.getElementById('logWrap');
-  if (wrap) wrap.scrollTop = wrap.scrollHeight;
-}
-
-// Position persistence
-let _savePos = null;
-
-function setupPositionPersistence(player, isVideoJS) {
-  _savePos = () => {
-    const t = isVideoJS ? player.currentTime() : player.currentTime;
-    if (t && t > 0) localStorage.setItem(COOKIE_NAME, t.toString());
-  };
-
-  const restorePos = () => {
-    const saved = localStorage.getItem(COOKIE_NAME);
-    if (saved) {
-      const t = parseFloat(saved);
-      if (t > 10) {
-        if (isVideoJS) player.currentTime(t);
-        else player.currentTime = t;
-      }
-    }
-  };
-
-  let lastSave = 0;
-  const savePosTimed = () => {
-    const now = Date.now();
-    if (now - lastSave >= 3000) { lastSave = now; _savePos(); }
-  };
-
-  if (isVideoJS) {
-    player.on('timeupdate', savePosTimed);
-    player.on('pause', _savePos);
-    player.on('loadedmetadata', restorePos);
-  } else {
-    player.addEventListener('timeupdate', savePosTimed);
-    player.addEventListener('pause', _savePos);
-    player.addEventListener('loadedmetadata', restorePos);
-  }
-}
-
-// Player abstraction for transport controls
-let vjsPlayer = null;
-
-function getPlayer() {
-  if (MEDIA_TYPE === 'video' && vjsPlayer) return { vjs: vjsPlayer };
-  return { el: document.getElementById('player') };
-}
-
+// Transport controls
 function seekBy(delta) {
-  const p = getPlayer();
-  if (p.vjs) {
-    p.vjs.currentTime(Math.max(0, p.vjs.currentTime() + delta));
-  } else if (p.el) {
-    p.el.currentTime = Math.max(0, p.el.currentTime + delta);
-  }
+  if (!player) return;
+  player.currentTime = Math.max(0, player.currentTime + delta);
   if (_savePos) _savePos();
 }
 
 function togglePlay() {
-  const p = getPlayer();
-  if (p.vjs) {
-    p.vjs.paused() ? p.vjs.play() : p.vjs.pause();
-  } else if (p.el) {
-    p.el.paused ? p.el.play() : p.el.pause();
-  }
+  if (player) player.togglePlay();
 }
 
 function updatePlayBtn(paused) {
@@ -504,120 +416,41 @@ function updatePlayBtn(paused) {
   document.getElementById('playLabel').textContent = paused ? 'PLAY' : 'PAUSE';
 }
 
-// Set up player
 window.addEventListener('DOMContentLoaded', () => {
-  if (MEDIA_TYPE === 'video' && typeof videojs !== 'undefined') {
-    vjsPlayer = videojs('player', {
-      fluid: true,
-      playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
-    });
-    setupPositionPersistence(vjsPlayer, true);
-    vjsPlayer.on('play',  () => updatePlayBtn(false));
-    vjsPlayer.on('pause', () => updatePlayBtn(true));
-  } else {
-    const el = document.getElementById('player');
-    if (el) {
-      setupPositionPersistence(el, false);
-      el.addEventListener('play',  () => updatePlayBtn(false));
-      el.addEventListener('pause', () => updatePlayBtn(true));
-    }
-  }
+  player = new Plyr('#player', {
+    controls: [
+            'rewind',
+            'play-large', 
+            'play', 
+            'progress',
+            'fast-forward',
+            'current-time', 
+            'fullscreen',
+  ]
+  });
 
-  scrollLogToBottom();
-});
-
-// Like/dislike
-async function setLike(value) {
-  const newValue = (currentLiked === value) ? 0 : value;
-  try {
-    const resp = await fetch('/api/like/' + MEDIA_ID, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: newValue }),
-    });
-    if (!resp.ok) return;
-
-    currentLiked = newValue;
-    document.getElementById('likeBtn').className =
-      'like-btn' + (newValue === 1 ? ' active-like' : '');
-    document.getElementById('dislikeBtn').className =
-      'like-btn' + (newValue === -1 ? ' active-dislike' : '');
-  } catch (e) {
-    console.error('like error', e);
-  }
-}
-
-async function retryDownload() {
-  const btn = document.getElementById('retryBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
-  try {
-    const resp = await fetch('/api/retry/' + MEDIA_ID, { method: 'POST' });
-    if (!resp.ok) { if (btn) { btn.disabled = false; btn.textContent = '↺ Retry'; } return; }
-    currentStatus = 'queued';
-    updateStatusBadge('queued');
-    setTimeout(pollStatus, 2000);
-  } catch (e) {
-    console.error('retry error', e);
-    if (btn) { btn.disabled = false; btn.textContent = '↺ Retry'; }
-  }
-}
-
-function updateStatusBadge(status) {
-  const badge = document.getElementById('statusBadge');
-  if (!badge) return;
-  const spinner = '<span class="spinner"></span> ';
-  const needsRetry = status === 'error' || status === 'interrupted';
-
-  const configs = {
-    done:        { cls: 'badge-done',        html: '&#10003; Done' },
-    error:       { cls: 'badge-error',       html: '&#10007; Error' },
-    interrupted: { cls: 'badge-interrupted', html: '&#9888; Interrupted' },
-    running:     { cls: 'badge-running',     html: spinner + 'Downloading' },
-    queued:      { cls: 'badge-queued',      html: spinner + 'Queued' },
+  // Position persistence
+  _savePos = () => {
+    if (player.currentTime > 0) localStorage.setItem(COOKIE_NAME, player.currentTime.toString());
   };
-  const cfg = configs[status] || configs.queued;
-  badge.className = 'badge ' + cfg.cls;
-  badge.innerHTML = cfg.html;
 
-  let retryBtn = document.getElementById('retryBtn');
-  if (needsRetry && !retryBtn) {
-    retryBtn = document.createElement('button');
-    retryBtn.className = 'retry-btn'; retryBtn.id = 'retryBtn';
-    retryBtn.innerHTML = '&#8635; Retry'; retryBtn.onclick = retryDownload;
-    badge.insertAdjacentElement('afterend', retryBtn);
-  } else if (!needsRetry && retryBtn) {
-    retryBtn.remove();
-  }
-}
-
-async function pollStatus() {
-  if (currentStatus !== 'running' && currentStatus !== 'queued') return;
-
-  try {
-    const resp = await fetch('/api/status/' + MEDIA_ID);
-    if (!resp.ok) return;
-    const data = await resp.json();
-
-    document.getElementById('logContent').textContent = data.log || '';
-    scrollLogToBottom();
-
-    if (data.status !== currentStatus) {
-      currentStatus = data.status;
-      updateStatusBadge(currentStatus);
+  let lastSave = 0;
+  player.on('timeupdate', () => {
+    const now = Date.now();
+    if (now - lastSave >= 3000) { lastSave = now; _savePos(); }
+  });
+  player.on('pause', _savePos);
+  player.on('loadedmetadata', () => {
+    const saved = localStorage.getItem(COOKIE_NAME);
+    if (saved) {
+      const t = parseFloat(saved);
+      if (t > 10) player.currentTime = t;
     }
+  });
 
-    if (currentStatus === 'running' || currentStatus === 'queued') {
-      setTimeout(pollStatus, 3000);
-    }
-  } catch (e) {
-    console.error('poll error', e);
-    setTimeout(pollStatus, 5000);
-  }
-}
-
-if (currentStatus === 'running' || currentStatus === 'queued') {
-  setTimeout(pollStatus, 3000);
-}
+  player.on('play',  () => updatePlayBtn(false));
+  player.on('pause', () => updatePlayBtn(true));
+});
 </script>
 
 </body>
