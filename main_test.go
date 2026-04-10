@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+func TestMain(m *testing.M) {
+	cfg = loadConfig()
+	os.Exit(m.Run())
+}
+
 // ---- metadata round-trip ----
 
 func TestWriteReadMetadataRoundTrip(t *testing.T) {
@@ -191,7 +196,7 @@ func TestRunCleanupRemovesDisliked(t *testing.T) {
 // ---- status constants ----
 
 func TestStatusValues(t *testing.T) {
-	// Ensure status string values match what the JS/templates expect.
+	// Ensure status string values match what the templates expect.
 	cases := map[Status]string{
 		StatusQueued:      "queued",
 		StatusRunning:     "running",

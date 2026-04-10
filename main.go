@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -130,6 +131,8 @@ func newApp() (*App, error) {
 			}
 			return fmt.Sprintf("/media/%s/file/audio.jpg", m.ID)
 		},
+		"sub1": func(n int) int { return n - 1 },
+		"add1": func(n int) int { return n + 1 },
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.html")
@@ -320,24 +323,77 @@ func (a *App) setStatus(id string, status Status) {
 }
 
 type indexData struct {
-	Items    []*Metadata
-	PageSize int
+	Items         []*Metadata
+	TotalItems    int
+	TotalFiltered int
+	Query         string
+	TypeFilter    string
+	Page          int
+	TotalPages    int
+	PageSize      int
+	Error         string
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	typeFilter := r.URL.Query().Get("type")
+	if typeFilter == "" {
+		typeFilter = "all"
+	}
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	errMsg := r.URL.Query().Get("error")
+
 	a.mu.RLock()
-	items := make([]*Metadata, 0, len(a.items))
+	all := make([]*Metadata, 0, len(a.items))
 	for _, m := range a.items {
-		items = append(items, m)
+		all = append(all, m)
 	}
 	a.mu.RUnlock()
 
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].SubmittedAt.After(items[j].SubmittedAt)
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].SubmittedAt.After(all[j].SubmittedAt)
 	})
 
+	qLower := strings.ToLower(q)
+	filtered := make([]*Metadata, 0, len(all))
+	for _, m := range all {
+		if typeFilter != "all" && string(m.Type) != typeFilter {
+			continue
+		}
+		if qLower != "" && !strings.Contains(strings.ToLower(m.Title+" "+m.Uploader), qLower) {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+
+	totalPages := 1
+	if len(filtered) > cfg.pageSize {
+		totalPages = (len(filtered) + cfg.pageSize - 1) / cfg.pageSize
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * cfg.pageSize
+	end := start + cfg.pageSize
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := a.tmpl.ExecuteTemplate(w, "list.html", indexData{Items: items, PageSize: cfg.pageSize}); err != nil {
+	if err := a.tmpl.ExecuteTemplate(w, "list.html", indexData{
+		Items:         filtered[start:end],
+		TotalItems:    len(all),
+		TotalFiltered: len(filtered),
+		Query:         q,
+		TypeFilter:    typeFilter,
+		Page:          page,
+		TotalPages:    totalPages,
+		PageSize:      cfg.pageSize,
+		Error:         errMsg,
+	}); err != nil {
 		log.Printf("execute list.html: %v", err)
 	}
 }
@@ -414,32 +470,23 @@ func (a *App) submitURL(url string, mediaType MediaType) (string, bool, error) {
 	return m.ID, false, nil
 }
 
-type submitRequest struct {
-	URL  string    `json:"url"`
-	Type MediaType `json:"type"`
-}
-
 func (a *App) handleSubmit(w http.ResponseWriter, r *http.Request) {
-	var req submitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	rawURL := r.FormValue("url")
+	if rawURL == "" {
+		http.Redirect(w, r, "/?error=URL+is+required", http.StatusSeeOther)
 		return
 	}
-	if req.URL == "" {
-		http.Error(w, "url is required", http.StatusBadRequest)
-		return
-	}
-	if req.Type != MediaVideo && req.Type != MediaAudio {
-		req.Type = MediaVideo
+	mediaType := MediaType(r.FormValue("type"))
+	if mediaType != MediaVideo && mediaType != MediaAudio {
+		mediaType = MediaVideo
 	}
 
-	id, _, err := a.submitURL(req.URL, req.Type)
+	id, _, err := a.submitURL(rawURL, mediaType)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Redirect(w, r, "/?error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"id": id})
+	http.Redirect(w, r, "/media/"+id, http.StatusSeeOther)
 }
 
 func (a *App) handleRetry(w http.ResponseWriter, r *http.Request) {
@@ -452,21 +499,18 @@ func (a *App) handleRetry(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if m.Status != StatusError && m.Status != StatusInterrupted {
+	if m.Status == StatusError || m.Status == StatusInterrupted {
+		m.Status = StatusQueued
+		if err := writeMetadata(m); err != nil {
+			log.Printf("retry writeMetadata %s: %v", id, err)
+		}
 		a.mu.Unlock()
-		http.Error(w, "can only retry failed or interrupted downloads", http.StatusConflict)
-		return
+		a.jobQueue <- m
+	} else {
+		a.mu.Unlock()
 	}
-	m.Status = StatusQueued
-	if err := writeMetadata(m); err != nil {
-		log.Printf("retry writeMetadata %s: %v", id, err)
-	}
-	a.mu.Unlock()
 
-	a.jobQueue <- m
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"id": id, "status": "queued"})
+	http.Redirect(w, r, "/media/"+id, http.StatusSeeOther)
 }
 
 // miniflux webhook support
@@ -504,14 +548,6 @@ func (a *App) handleMinifluxWebhook(mediaType MediaType) http.HandlerFunc {
 			return
 		}
 
-		type result struct {
-			URL       string `json:"url"`
-			ID        string `json:"id,omitempty"`
-			Duplicate bool   `json:"duplicate,omitempty"`
-			Error     string `json:"error,omitempty"`
-		}
-		results := make([]result, 0, len(entries))
-
 		for _, entry := range entries {
 			if entry.URL == "" {
 				continue
@@ -519,13 +555,11 @@ func (a *App) handleMinifluxWebhook(mediaType MediaType) http.HandlerFunc {
 			id, duplicate, err := a.submitURL(entry.URL, mediaType)
 			if err != nil {
 				log.Printf("miniflux webhook: submit %q: %v", entry.URL, err)
-				results = append(results, result{URL: entry.URL, Error: err.Error()})
 				continue
 			}
 			if duplicate {
 				log.Printf("miniflux webhook: duplicate url=%q id=%s, skipping", entry.URL, id)
 			}
-			results = append(results, result{URL: entry.URL, ID: id, Duplicate: duplicate})
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -624,19 +658,11 @@ func (a *App) download(m *Metadata) {
 	a.setStatus(m.ID, StatusDone)
 }
 
-type likeRequest struct {
-	Value int `json:"value"`
-}
-
 func (a *App) handleLike(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	var req likeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
-		return
-	}
-	if req.Value < -1 || req.Value > 1 {
+	value, err := strconv.Atoi(r.FormValue("value"))
+	if err != nil || value < -1 || value > 1 {
 		http.Error(w, "value must be -1, 0, or 1", http.StatusBadRequest)
 		return
 	}
@@ -644,7 +670,10 @@ func (a *App) handleLike(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	m, ok := a.items[id]
 	if ok {
-		m.Liked = req.Value
+		if m.Liked == value {
+			value = 0 // toggle off
+		}
+		m.Liked = value
 		if err := writeMetadata(m); err != nil {
 			log.Printf("like writeMetadata %s: %v", id, err)
 		}
@@ -656,30 +685,7 @@ func (a *App) handleLike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"liked": req.Value})
-}
-
-func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-
-	a.mu.RLock()
-	m, ok := a.items[id]
-	a.mu.RUnlock()
-
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-
-	logPath := filepath.Join(cfg.dataDir, id, "log.txt")
-	logBytes, _ := os.ReadFile(logPath)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": string(m.Status),
-		"log":    string(logBytes),
-	})
+	http.Redirect(w, r, "/media/"+id, http.StatusSeeOther)
 }
 
 func (a *App) handleFile(w http.ResponseWriter, r *http.Request) {
@@ -769,7 +775,6 @@ func main() {
 	mux.HandleFunc("POST /api/submit", app.handleSubmit)
 	mux.HandleFunc("POST /api/retry/{id}", app.handleRetry)
 	mux.HandleFunc("POST /api/like/{id}", app.handleLike)
-	mux.HandleFunc("GET /api/status/{id}", app.handleStatus)
 	mux.HandleFunc("GET /media/{id}/file/{filename}", app.handleFile)
 	mux.HandleFunc("POST /api/webhook/miniflux/video", app.handleMinifluxWebhook(MediaVideo))
 	mux.HandleFunc("POST /api/webhook/miniflux/audio", app.handleMinifluxWebhook(MediaAudio))
@@ -777,8 +782,8 @@ func main() {
 	staticHandler := http.FileServer(http.FS(staticFS))
 	mux.Handle("GET /static/", staticHandler)
 
-	log.Printf("offtube listening on :8080")
-	if err := http.ListenAndServe("0.0.0.0:8080", mux); err != nil {
+	log.Printf("offtube listening on :8088")
+	if err := http.ListenAndServe("0.0.0.0:8088", mux); err != nil {
 		log.Fatalf("listen: %v", err)
 	}
 }
