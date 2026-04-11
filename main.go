@@ -483,6 +483,7 @@ func (a *App) handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 	id, _, err := a.submitURL(rawURL, mediaType)
 	if err != nil {
+		log.Printf("submit %q: %v", rawURL, err)
 		http.Redirect(w, r, "/?error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -531,6 +532,7 @@ func (a *App) handleMinifluxWebhook(mediaType MediaType) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload minifluxPayload
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			log.Printf("miniflux webhook: decode body: %v", err)
 			http.Error(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
@@ -590,7 +592,7 @@ func (a *App) download(m *Metadata) {
 	if m.Type == MediaVideo {
 		args = []string{
 			// best video + best audio, merged into mp4
-			"--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+			"--format", "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[vcodec^=avc1]+bestaudio/best[vcodec^=avc1]/best",
 			"--output", fmt.Sprintf("data/%s/video.%%(ext)s", m.ID),
 			"--merge-output-format", "mp4",
 			"--write-thumbnail",
@@ -620,18 +622,21 @@ func (a *App) download(m *Metadata) {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		log.Printf("download %s: stdout pipe: %v", m.ID, err)
 		fmt.Fprintf(logFile, "stdout pipe error: %v\n", err)
 		a.setStatus(m.ID, StatusError)
 		return
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
+		log.Printf("download %s: stderr pipe: %v", m.ID, err)
 		fmt.Fprintf(logFile, "stderr pipe error: %v\n", err)
 		a.setStatus(m.ID, StatusError)
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
+		log.Printf("download %s: start yt-dlp: %v", m.ID, err)
 		fmt.Fprintf(logFile, "start error: %v\n", err)
 		a.setStatus(m.ID, StatusError)
 		return
@@ -650,6 +655,7 @@ func (a *App) download(m *Metadata) {
 	wg.Wait()
 
 	if err := cmd.Wait(); err != nil {
+		log.Printf("download %s: yt-dlp exited: %v", m.ID, err)
 		fmt.Fprintf(logFile, "\nDownload error: %v\n", err)
 		a.setStatus(m.ID, StatusError)
 		return
