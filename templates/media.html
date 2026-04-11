@@ -384,73 +384,90 @@
 
 <script src="/static/plyr/plyr.min.js"></script>
 <script>
-const COOKIE_NAME = "pos_{{.Media.ID}}";
-let player = null;
-let _savePos = null;
+	const player = new Plyr('#player', {
+		controls: [
+			'rewind',
+			'play-large', 
+			'play', 
+			'progress',
+			'fast-forward',
+			'current-time', 
+			'fullscreen',
+		]
+	});
 
-// Tab switching
-function showTab(name, btn) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
-  if (name === 'log') {
-    const wrap = document.getElementById('logWrap');
-    if (wrap) wrap.scrollTop = wrap.scrollHeight;
-  }
-}
+	player.on('loadeddata', () => {
+		let start = getCookie('{{ .Media.ID }}')
+		if (start) {
+			player.currentTime = Number(start);
+		}
+	});
 
-// Transport controls
-function seekBy(delta) {
-  if (!player) return;
-  player.currentTime = Math.max(0, player.currentTime + delta);
-  if (_savePos) _savePos();
-}
+	player.on('ready', () => {
+		let start = getCookie('{{ .Media.ID }}')
+		if (start) {
+			player.currentTime = Number(start);
+		}
+	});
 
-function togglePlay() {
-  if (player) player.togglePlay();
-}
+	player.on('timeupdate', () => {
+		let ct = Math.trunc(player.currentTime);
+		if (ct > 0 && ct % 5 == 0) {
+			setCookie('{{ .Media.ID }}', ct.toString() ,1)
+		}
 
-function updatePlayBtn(paused) {
-  document.getElementById('playIcon').textContent  = paused ? '▶' : '⏸';
-  document.getElementById('playLabel').textContent = paused ? 'PLAY' : 'PAUSE';
-}
+	});
 
-window.addEventListener('DOMContentLoaded', () => {
-  player = new Plyr('#player', {
-    controls: [
-            'rewind',
-            'play-large', 
-            'play', 
-            'progress',
-            'fast-forward',
-            'current-time', 
-            'fullscreen',
-  ]
-  });
+	// Tab switching
+	function showTab(name, btn) {
+		document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+		document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+		document.getElementById('tab-' + name).classList.add('active');
+		btn.classList.add('active');
+		if (name === 'log') {
+			const wrap = document.getElementById('logWrap');
+			if (wrap) wrap.scrollTop = wrap.scrollHeight;
+		}
+	}
 
-  // Position persistence
-  _savePos = () => {
-    if (player.currentTime > 0) localStorage.setItem(COOKIE_NAME, player.currentTime.toString());
-  };
+	// Transport controls
+	function seekBy(delta) {
+		if (!player) return;
+		player.currentTime = Math.max(0, player.currentTime + delta);
+		if (_savePos) _savePos();
+	}
 
-  let lastSave = 0;
-  player.on('timeupdate', () => {
-    const now = Date.now();
-    if (now - lastSave >= 3000) { lastSave = now; _savePos(); }
-  });
-  player.on('pause', _savePos);
-  player.on('loadedmetadata', () => {
-    const saved = localStorage.getItem(COOKIE_NAME);
-    if (saved) {
-      const t = parseFloat(saved);
-      if (t > 10) player.currentTime = t;
-    }
-  });
+	function togglePlay() {
+		if (player) player.togglePlay();
+	}
 
-  player.on('play',  () => updatePlayBtn(false));
-  player.on('pause', () => updatePlayBtn(true));
-});
+	function updatePlayBtn(paused) {
+		document.getElementById('playIcon').textContent  = paused ? '▶' : '⏸';
+		document.getElementById('playLabel').textContent = paused ? 'PLAY' : 'PAUSE';
+	}
+
+	function getCookie(name) {
+		var nameEQ = name + "=";
+		var ca = document.cookie.split(';');
+		for(var i=0;i < ca.length;i++) {
+			var c = ca[i];
+			while (c.charAt(0)==' ') 
+				c = c.substring(1,c.length);
+			if (c.indexOf(nameEQ) == 0) 
+				return c.substring(nameEQ.length,c.length);
+		}
+		return null;
+	}
+	function setCookie(name,value,days) {
+		var expires = "";
+		if (days) {
+			var date = new Date();
+			date.setTime(date.getTime() + (days*24*60*60*1000));
+			expires = "; expires=" + date.toUTCString();
+		}
+		document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+	}
+
 </script>
 
 </body>
