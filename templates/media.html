@@ -166,40 +166,6 @@
       border-radius: 8px;
     }
 
-    /* Transport controls */
-    .transport {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem 0;
-    }
-
-    .transport-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.2rem;
-      background: #1e1e1e;
-      border: 1px solid #3a3a3a;
-      border-radius: 12px;
-      color: #e0e0e0;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-      user-select: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    .transport-btn:active { background: #2a2a2a; }
-
-    .transport-btn .icon { font-size: 1.6rem; line-height: 1; }
-    .transport-btn .label { font-size: 0.65rem; color: #888; font-weight: 600; letter-spacing: 0.03em; }
-
-    .transport-btn.btn-seek  { width: 72px; height: 72px; }
-    .transport-btn.btn-play  { width: 88px; height: 88px; border-color: #ff4444; }
-    .transport-btn.btn-play .icon { font-size: 2rem; color: #ff4444; }
-
     /* Metadata table */
     .meta-table {
       width: 100%;
@@ -341,22 +307,6 @@
     </audio>
     {{end}}
 
-    <div class="transport">
-      <button class="transport-btn btn-seek" onclick="seekBy(-5)" title="-5 seconds">
-        <span class="icon">&#8592;</span>
-        <span class="label">-5s</span>
-      </button>
-      <button class="transport-btn btn-play" onclick="togglePlay()" title="Play / Pause">
-        <span class="icon" id="playIcon">&#9654;</span>
-        <span class="label" id="playLabel">PLAY</span>
-      </button>
-      <button class="transport-btn btn-seek" onclick="seekBy(5)" title="+5 seconds">
-        <span class="icon">&#8594;</span>
-        <span class="label">+5s</span>
-      </button>
-    </div>
-  </div>
-
   <!-- Metadata tab -->
   <div class="tab-panel" id="tab-metadata">
     <table class="meta-table">
@@ -429,23 +379,6 @@
 			if (wrap) wrap.scrollTop = wrap.scrollHeight;
 		}
 	}
-
-	// Transport controls
-	function seekBy(delta) {
-		if (!player) return;
-		player.currentTime = Math.max(0, player.currentTime + delta);
-		if (_savePos) _savePos();
-	}
-
-	function togglePlay() {
-		if (player) player.togglePlay();
-	}
-
-	function updatePlayBtn(paused) {
-		document.getElementById('playIcon').textContent  = paused ? '▶' : '⏸';
-		document.getElementById('playLabel').textContent = paused ? 'PLAY' : 'PAUSE';
-	}
-
 	function getCookie(name) {
 		var nameEQ = name + "=";
 		var ca = document.cookie.split(';');
